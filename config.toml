@@ -1,0 +1,21 @@
+# PDF generator configuration
+
+[links]
+color = "#1a4f8b"
+underline = true
+
+[page]
+numbers = false
+
+[font]
+sans = false
+
+[layout]
+# Minimum space required before starting a heading (as % of page height)
+# If less space remains, the heading moves to the next page
+h1_min_space = "30%"
+h2_min_space = "30%"
+h3_min_space = "20%"
+
+# If a section has more than this many lines, start it on a new page
+h2_break_if_lines = 25

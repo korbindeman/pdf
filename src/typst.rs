@@ -1,18 +1,85 @@
 use crate::block::{Block, List, Span};
+use crate::config::Config;
 
 /// Convert blocks to Typst markup
-pub fn blocks_to_typst(blocks: &[Block]) -> String {
+pub fn blocks_to_typst(blocks: &[Block], config: &Config) -> String {
     let mut out = String::new();
 
     // Set up paragraph settings to prevent widows/orphans
-    out.push_str("#set par(linebreaks: \"optimized\")\n\n");
+    out.push_str("#set par(linebreaks: \"optimized\")\n");
+
+    // Font family
+    if config.font.sans {
+        out.push_str("#set text(font: \"Open Sans\")\n");
+    }
+
+    // Page numbers
+    if config.page.numbers {
+        out.push_str("#set page(numbering: \"1\")\n");
+    }
+
+    // Style links
+    if config.links.underline {
+        out.push_str(&format!(
+            "#show link: it => underline(text(fill: rgb(\"{}\"), it))\n",
+            config.links.color
+        ));
+    } else {
+        out.push_str(&format!(
+            "#show link: it => text(fill: rgb(\"{}\"), it)\n",
+            config.links.color
+        ));
+    }
+
+    out.push('\n');
+
+    // Track if previous long section needs a break after it, and at what level
+    let mut pending_end_break_level: Option<u8> = None;
 
     let mut i = 0;
     while i < blocks.len() {
         let block = &blocks[i];
 
         match block {
-            Block::Heading { .. } => {
+            Block::Heading { level, .. } => {
+                // Check if this section is long enough to warrant a page break
+                let section_lines = count_section_lines(blocks, i);
+                let force_break = config
+                    .layout
+                    .break_if_lines_for_heading(*level)
+                    .map(|threshold| section_lines >= threshold)
+                    .unwrap_or(false);
+
+                // Only process end breaks for headings at the same level or higher
+                let should_check_end_break = pending_end_break_level
+                    .map(|pending_level| *level <= pending_level)
+                    .unwrap_or(false);
+
+                if force_break {
+                    // This section wants a break before it, which satisfies any pending end break
+                    pending_end_break_level = None;
+                    strip_trailing_rule(&mut out);
+                    out.push_str("#pagebreak(weak: true)\n");
+                } else if should_check_end_break {
+                    // Insert pending end break from previous long section
+                    strip_trailing_rule(&mut out);
+                    out.push_str("#pagebreak(weak: true)\n");
+                    pending_end_break_level = None;
+                } else if let Some(min_space) = config.layout.min_space_for_heading(*level) {
+                    // If min_space is configured, insert a non-breaking block to reserve space
+                    // This causes Typst to move the heading to the next page if not enough room
+                    out.push_str(&format!(
+                        "#block(breakable: false, height: {})\n",
+                        min_space
+                    ));
+                    out.push_str(&format!("#v(-{}, weak: true)\n", min_space));
+                }
+
+                // If this section is long, mark that we need a break after it
+                if force_break {
+                    pending_end_break_level = Some(*level);
+                }
+
                 // Keep heading with following content using a block that prevents breaks
                 out.push_str("#block(breakable: false)[\n");
                 emit_heading(block, &mut out);
@@ -35,6 +102,74 @@ pub fn blocks_to_typst(blocks: &[Block]) -> String {
     out
 }
 
+/// Remove trailing horizontal rule if present (redundant before page breaks)
+fn strip_trailing_rule(out: &mut String) {
+    let rule_str = "#line(length: 100%)\n\n";
+    if out.ends_with(rule_str) {
+        out.truncate(out.len() - rule_str.len());
+    }
+}
+
+/// Count approximate lines in a section (from heading to next heading of same or higher level)
+fn count_section_lines(blocks: &[Block], start: usize) -> usize {
+    let start_level = match &blocks[start] {
+        Block::Heading { level, .. } => *level,
+        _ => return 0,
+    };
+
+    let mut lines = 0;
+
+    for block in blocks.iter().skip(start + 1) {
+        match block {
+            Block::Heading { level, .. } if *level <= start_level => break,
+            Block::Paragraph { content } => {
+                // Estimate lines based on content length (~80 chars per line)
+                let char_count: usize = content.iter().map(|s| span_char_count(s)).sum();
+                lines += (char_count / 80).max(1);
+            }
+            Block::CodeBlock { content, .. } => {
+                lines += content.lines().count();
+            }
+            Block::List(list) => {
+                lines += count_list_lines(list);
+            }
+            Block::Table { headers, rows } => {
+                lines += 1 + headers.len() + rows.len();
+            }
+            Block::Rule => {
+                lines += 1;
+            }
+            Block::Heading { .. } => {
+                lines += 2; // Heading + spacing
+            }
+            Block::PageBreak => {}
+        }
+    }
+
+    lines
+}
+
+fn span_char_count(span: &Span) -> usize {
+    match span {
+        Span::Text(t) => t.len(),
+        Span::Bold(inner) | Span::Italic(inner) => inner.iter().map(span_char_count).sum(),
+        Span::Code(t) => t.len(),
+        Span::Link { content, .. } => content.iter().map(span_char_count).sum(),
+        Span::LineBreak => 1,
+    }
+}
+
+fn count_list_lines(list: &List) -> usize {
+    let mut lines = 0;
+    for item in &list.items {
+        lines += 1;
+        if let Some(ref nested) = item.nested {
+            lines += count_list_lines(nested);
+        }
+    }
+    lines
+}
+
 fn emit_heading(block: &Block, out: &mut String) {
     if let Block::Heading { level, content } = block {
         for _ in 0..*level {
@@ -42,8 +177,47 @@ fn emit_heading(block: &Block, out: &mut String) {
         }
         out.push(' ');
         spans_to_typst(content, out);
+        // Add a label for internal linking based on heading text
+        let label = heading_to_label(content);
+        if !label.is_empty() {
+            out.push(' ');
+            out.push('<');
+            out.push_str(&label);
+            out.push('>');
+        }
         out.push('\n');
         out.push('\n');
+    }
+}
+
+/// Convert heading content to a URL-style label (lowercase, hyphens for spaces)
+fn heading_to_label(spans: &[Span]) -> String {
+    let mut text = String::new();
+    collect_span_text(spans, &mut text);
+
+    // Convert to lowercase, replace spaces with hyphens, keep only alphanumeric and hyphens
+    text.chars()
+        .map(|c| {
+            if c.is_whitespace() {
+                '-'
+            } else {
+                c.to_ascii_lowercase()
+            }
+        })
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
+        .collect()
+}
+
+/// Recursively collect plain text from spans
+fn collect_span_text(spans: &[Span], out: &mut String) {
+    for span in spans {
+        match span {
+            Span::Text(t) => out.push_str(t),
+            Span::Bold(inner) | Span::Italic(inner) => collect_span_text(inner, out),
+            Span::Code(t) => out.push_str(t),
+            Span::Link { content, .. } => collect_span_text(content, out),
+            Span::LineBreak => out.push(' '),
+        }
     }
 }
 
@@ -90,6 +264,10 @@ fn emit_block(block: &Block, out: &mut String) {
         }
         Block::Rule => {
             out.push_str("#line(length: 100%)\n\n");
+        }
+        Block::PageBreak => {
+            strip_trailing_rule(out);
+            out.push_str("#pagebreak()\n\n");
         }
     }
 }
@@ -139,6 +317,23 @@ fn span_to_typst(span: &Span, out: &mut String) {
             // Inside raw/code, backticks need special handling
             out.push_str(&text.replace('`', "\\`"));
             out.push('`');
+        }
+        Span::Link { url, content } => {
+            if let Some(anchor) = url.strip_prefix('#') {
+                // Internal link to a heading
+                out.push_str("#link(<");
+                out.push_str(anchor);
+                out.push_str(">)[");
+                spans_to_typst(content, out);
+                out.push(']');
+            } else {
+                // External link
+                out.push_str("#link(\"");
+                out.push_str(&url.replace('\\', "\\\\").replace('"', "\\\""));
+                out.push_str("\")[");
+                spans_to_typst(content, out);
+                out.push(']');
+            }
         }
         Span::LineBreak => {
             out.push_str(" \\\n");
@@ -201,7 +396,7 @@ mod tests {
     fn heading() {
         assert_eq!(
             markdown_to_typst("# Hello"),
-            format!("{PREAMBLE}#block(breakable: false)[\n= Hello\n\n]\n\n")
+            format!("{PREAMBLE}#block(breakable: false)[\n= Hello <hello>\n\n]\n\n")
         );
     }
 
@@ -209,7 +404,9 @@ mod tests {
     fn heading_with_following_content() {
         // Heading should be grouped with following paragraph
         let result = markdown_to_typst("# Title\n\nSome text.");
-        assert!(result.contains("#block(breakable: false)[\n= Title\n\nSome text.\n\n]\n\n"));
+        assert!(
+            result.contains("#block(breakable: false)[\n= Title <title>\n\nSome text.\n\n]\n\n")
+        );
     }
 
     #[test]

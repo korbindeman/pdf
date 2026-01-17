@@ -1398,6 +1398,8 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "pulldown-cmark",
+ "serde",
+ "toml",
  "typst-as-lib",
  "typst-library",
  "typst-pdf",

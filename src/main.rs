@@ -13,10 +13,18 @@ struct Cli {
     /// Output PDF file (defaults to input name with .pdf extension)
     #[arg(short, long)]
     output: Option<PathBuf>,
+
+    /// Config file (defaults to config.toml in current directory)
+    #[arg(short, long)]
+    config: Option<PathBuf>,
 }
 
 fn main() {
     let cli = Cli::parse();
+
+    // Load config
+    let config_path = cli.config.unwrap_or_else(|| PathBuf::from("config.toml"));
+    let config = pdf::Config::load(&config_path);
 
     // Read input file
     let markdown = match fs::read_to_string(&cli.input) {
@@ -28,7 +36,7 @@ fn main() {
     };
 
     // Convert markdown to PDF
-    let pdf_bytes = match pdf::markdown_to_pdf(&markdown) {
+    let pdf_bytes = match pdf::markdown_to_pdf_with_config(&markdown, &config) {
         Ok(bytes) => bytes,
         Err(e) => {
             eprintln!("Error: {}", e);

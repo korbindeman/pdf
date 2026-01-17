@@ -5,6 +5,7 @@ pub enum Span {
     Bold(Vec<Span>),
     Italic(Vec<Span>),
     Code(String),
+    Link { url: String, content: Vec<Span> },
     LineBreak,
 }
 
@@ -43,4 +44,5 @@ pub enum Block {
         rows: Vec<Vec<Vec<Span>>>,
     },
     Rule,
+    PageBreak,
 }

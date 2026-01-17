@@ -34,6 +34,9 @@ struct ParseState {
     code_language: Option<String>,
     code_content: String,
 
+    // Link state
+    link_url: Option<String>,
+
     // List state
     list_stack: Vec<ListBuilder>,
 
@@ -75,6 +78,15 @@ fn process_event(event: Event, state: &mut ParseState, blocks: &mut Vec<Block>) 
         Event::End(TagEnd::Paragraph) => {
             let content = std::mem::take(&mut state.spans);
             if !content.is_empty() {
+                // Check for manual page break marker
+                if content.len() == 1 {
+                    if let Span::Text(text) = &content[0] {
+                        if text.trim() == "---pagebreak---" {
+                            blocks.push(Block::PageBreak);
+                            return;
+                        }
+                    }
+                }
                 // If we're in a list item, add to that instead
                 if let Some(list) = state.list_stack.last_mut() {
                     list.current_item_spans.extend(content);
@@ -124,6 +136,24 @@ fn process_event(event: Event, state: &mut ParseState, blocks: &mut Vec<Block>) 
             let italic_content = std::mem::take(&mut state.spans);
             if let Some(mut parent) = state.span_stack.pop() {
                 parent.push(Span::Italic(italic_content));
+                state.spans = parent;
+            }
+        }
+
+        // Links
+        Event::Start(Tag::Link { dest_url, .. }) => {
+            state.link_url = Some(dest_url.into_string());
+            state.span_stack.push(std::mem::take(&mut state.spans));
+        }
+        Event::End(TagEnd::Link) => {
+            let link_content = std::mem::take(&mut state.spans);
+            if let Some(mut parent) = state.span_stack.pop() {
+                if let Some(url) = state.link_url.take() {
+                    parent.push(Span::Link {
+                        url,
+                        content: link_content,
+                    });
+                }
                 state.spans = parent;
             }
         }
