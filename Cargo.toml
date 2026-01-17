@@ -1,13 +1,16 @@
 [package]
 name = "pdf"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
+
+[build-dependencies]
+toml = "0.9"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 pulldown-cmark = "0.13"
 serde = { version = "1", features = ["derive"] }
-toml = "0.8"
-typst-as-lib = { version = "0.14", features = ["typst-kit-fonts", "typst-kit-embed-fonts"] }
-typst-library = "0.13"
-typst-pdf = "0.13"
+toml = "0.9"
+typst-as-lib = { version = "0.15", features = ["typst-kit-fonts", "typst-kit-embed-fonts"] }
+typst-library = "0.14"
+typst-pdf = "0.14"

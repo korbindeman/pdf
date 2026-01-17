@@ -2,6 +2,9 @@ use serde::Deserialize;
 use std::fs;
 use std::path::Path;
 
+// Embed default config at compile time
+static DEFAULT_CONFIG: &str = include_str!("default_config.toml");
+
 #[derive(Debug, Deserialize, Default)]
 #[serde(default)]
 pub struct Config {
@@ -9,6 +12,13 @@ pub struct Config {
     pub page: PageConfig,
     pub font: FontConfig,
     pub layout: LayoutConfig,
+}
+
+impl Config {
+    /// Returns the compiled-in default configuration.
+    pub fn compiled_default() -> Self {
+        toml::from_str(DEFAULT_CONFIG).expect("default config.toml should be valid")
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -90,8 +100,8 @@ impl Config {
     /// Load config from a TOML file, or return defaults if not found.
     pub fn load(path: &Path) -> Self {
         match fs::read_to_string(path) {
-            Ok(content) => toml::from_str(&content).unwrap_or_default(),
-            Err(_) => Self::default(),
+            Ok(content) => toml::from_str(&content).unwrap_or_else(|_| Self::compiled_default()),
+            Err(_) => Self::compiled_default(),
         }
     }
 }

@@ -14,6 +14,8 @@ pub enum Span {
 pub struct ListItem {
     pub content: Vec<Span>,
     pub nested: Option<Box<List>>,
+    /// For task lists: None = not a task, Some(false) = unchecked, Some(true) = checked
+    pub checked: Option<bool>,
 }
 
 /// A list (ordered or unordered)

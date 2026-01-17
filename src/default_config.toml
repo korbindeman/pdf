@@ -1,4 +1,4 @@
-# PDF generator configuration
+# PDF generator configuration (default values)
 
 [links]
 color = "#1a4f8b"
@@ -18,4 +18,5 @@ h2_min_space = "30%"
 h3_min_space = "20%"
 
 # If a section has more than this many lines, start it on a new page
+# (also inserts a page break after the section ends)
 h2_break_if_lines = 25

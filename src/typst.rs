@@ -232,8 +232,12 @@ fn emit_block(block: &Block, out: &mut String) {
             out.push('\n');
         }
         Block::CodeBlock { language, content } => {
-            // Keep code blocks together when possible
-            out.push_str("#block(breakable: false)[\n```");
+            // Keep small code blocks together, allow large ones to break
+            let line_count = content.lines().count();
+            if line_count <= 20 {
+                out.push_str("#block(breakable: false)[\n");
+            }
+            out.push_str("```");
             if let Some(lang) = language {
                 out.push_str(lang);
             }
@@ -242,7 +246,11 @@ fn emit_block(block: &Block, out: &mut String) {
             if !content.ends_with('\n') {
                 out.push('\n');
             }
-            out.push_str("```\n]\n\n");
+            out.push_str("```\n");
+            if line_count <= 20 {
+                out.push_str("]\n");
+            }
+            out.push('\n');
         }
         Block::List(list) => {
             // Wrap list to keep together when small, allow breaks when large
@@ -347,10 +355,21 @@ fn list_to_typst(list: &List, indent: usize, out: &mut String) {
 
     for item in &list.items {
         out.push_str(&indent_str);
-        out.push_str(prefix);
-        out.push(' ');
-        spans_to_typst(&item.content, out);
-        out.push('\n');
+        // Task list items: use checkbox instead of bullet
+        if let Some(checked) = item.checked {
+            if checked {
+                out.push_str("#box(inset: (x: 2pt))[#text(1.2em)[#sym.ballot.check]] ");
+            } else {
+                out.push_str("#box(inset: (x: 2pt))[#text(1.2em)[#sym.ballot]] ");
+            }
+            spans_to_typst(&item.content, out);
+            out.push_str("\\\n");
+        } else {
+            out.push_str(prefix);
+            out.push(' ');
+            spans_to_typst(&item.content, out);
+            out.push('\n');
+        }
 
         if let Some(ref nested) = item.nested {
             list_to_typst(nested, indent + 1, out);
@@ -440,10 +459,25 @@ mod tests {
 
     #[test]
     fn code_block() {
+        // Small code blocks are kept together
         assert_eq!(
             markdown_to_typst("```rust\nlet x = 1;\n```"),
             format!("{PREAMBLE}#block(breakable: false)[\n```rust\nlet x = 1;\n```\n]\n\n")
         );
+    }
+
+    #[test]
+    fn long_code_block() {
+        // Long code blocks (>20 lines) are allowed to break across pages
+        let long_code = (1..=25)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let md = format!("```\n{long_code}\n```");
+        let result = markdown_to_typst(&md);
+        // Should NOT have breakable: false wrapper
+        assert!(!result.contains("breakable: false"));
+        assert!(result.contains("```\n"));
     }
 
     #[test]

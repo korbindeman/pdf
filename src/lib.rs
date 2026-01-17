@@ -23,7 +23,7 @@ pub fn parse(markdown: &str) -> Vec<Block> {
 
 /// Convert markdown to Typst markup using default config.
 pub fn markdown_to_typst(markdown: &str) -> String {
-    markdown_to_typst_with_config(markdown, &Config::default())
+    markdown_to_typst_with_config(markdown, &Config::compiled_default())
 }
 
 /// Convert markdown to Typst markup with custom config.
@@ -34,7 +34,7 @@ pub fn markdown_to_typst_with_config(markdown: &str, config: &Config) -> String 
 
 /// Convert markdown to PDF bytes using default config.
 pub fn markdown_to_pdf(markdown: &str) -> Result<Vec<u8>, String> {
-    markdown_to_pdf_with_config(markdown, &Config::default())
+    markdown_to_pdf_with_config(markdown, &Config::compiled_default())
 }
 
 /// Convert markdown to PDF bytes with custom config.

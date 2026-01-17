@@ -6,6 +6,7 @@ use crate::block::{Block, List, ListItem, Span};
 pub fn parse(markdown: &str) -> Vec<Block> {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);
+    options.insert(Options::ENABLE_TASKLISTS);
     let parser = Parser::new_ext(markdown, options);
     let mut blocks = Vec::new();
     let mut state = ParseState::default();
@@ -58,6 +59,7 @@ struct ListBuilder {
     ordered: bool,
     items: Vec<ListItem>,
     current_item_spans: Vec<Span>,
+    current_item_checked: Option<bool>,
 }
 
 fn process_event(event: Event, state: &mut ParseState, blocks: &mut Vec<Block>) {
@@ -164,11 +166,7 @@ fn process_event(event: Event, state: &mut ParseState, blocks: &mut Vec<Block>) 
             state.code_language = match kind {
                 pulldown_cmark::CodeBlockKind::Fenced(lang) => {
                     let lang = lang.into_string();
-                    if lang.is_empty() {
-                        None
-                    } else {
-                        Some(lang)
-                    }
+                    if lang.is_empty() { None } else { Some(lang) }
                 }
                 pulldown_cmark::CodeBlockKind::Indented => None,
             };
@@ -187,6 +185,7 @@ fn process_event(event: Event, state: &mut ParseState, blocks: &mut Vec<Block>) 
                 ordered: first_item.is_some(),
                 items: Vec::new(),
                 current_item_spans: Vec::new(),
+                current_item_checked: None,
             });
         }
         Event::End(TagEnd::List(_)) => {
@@ -209,6 +208,7 @@ fn process_event(event: Event, state: &mut ParseState, blocks: &mut Vec<Block>) 
         Event::Start(Tag::Item) => {
             if let Some(list) = state.list_stack.last_mut() {
                 list.current_item_spans.clear();
+                list.current_item_checked = None;
             }
         }
         Event::End(TagEnd::Item) => {
@@ -218,10 +218,19 @@ fn process_event(event: Event, state: &mut ParseState, blocks: &mut Vec<Block>) 
             if let Some(list) = state.list_stack.last_mut() {
                 list.current_item_spans.extend(remaining);
                 let content = std::mem::take(&mut list.current_item_spans);
+                let checked = list.current_item_checked.take();
                 list.items.push(ListItem {
                     content,
                     nested: None,
+                    checked,
                 });
+            }
+        }
+
+        // Task list checkboxes
+        Event::TaskListMarker(checked) => {
+            if let Some(list) = state.list_stack.last_mut() {
+                list.current_item_checked = Some(checked);
             }
         }
 
