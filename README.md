@@ -10,6 +10,7 @@ A Rust CLI tool and library for converting Markdown files to PDF. Uses Typst as 
 - Paragraphs with bold, italic, and inline code
 - Code blocks with syntax highlighting
 - Ordered and unordered lists (with nesting)
+- Task lists / checklists
 - Tables
 - Horizontal rules
 - Smart page breaks (keeps headings with content, avoids widows/orphans)
