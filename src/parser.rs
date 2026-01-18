@@ -2,8 +2,24 @@ use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
 use crate::block::{Block, List, ListItem, Span};
 
+/// Strip YAML frontmatter from the beginning of markdown content
+fn strip_frontmatter(markdown: &str) -> &str {
+    if !markdown.starts_with("---") {
+        return markdown;
+    }
+    // Find the closing ---
+    if let Some(end) = markdown[3..].find("\n---") {
+        // Skip past the closing --- and any trailing newline
+        let after_frontmatter = &markdown[3 + end + 4..];
+        after_frontmatter.trim_start_matches('\n')
+    } else {
+        markdown
+    }
+}
+
 /// Parse markdown text into a list of blocks
 pub fn parse(markdown: &str) -> Vec<Block> {
+    let markdown = strip_frontmatter(markdown);
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);
     options.insert(Options::ENABLE_TASKLISTS);
