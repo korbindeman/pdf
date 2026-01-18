@@ -377,24 +377,43 @@ fn list_to_typst(list: &List, indent: usize, out: &mut String) {
     }
 }
 
+/// Check if a row (list of cells) is empty
+fn is_row_empty(row: &[Vec<Span>]) -> bool {
+    row.iter().all(|cell| {
+        cell.is_empty()
+            || cell.iter().all(|span| match span {
+                Span::Text(t) => t.trim().is_empty(),
+                _ => false,
+            })
+    })
+}
+
 fn table_to_typst(headers: &[Vec<Span>], rows: &[Vec<Vec<Span>>], out: &mut String) {
     let col_count = headers.len();
     if col_count == 0 {
         return;
     }
 
+    // Skip empty header row
+    let has_headers = !is_row_empty(headers);
+
     out.push_str("#table(\n");
     out.push_str(&format!("  columns: {},\n", col_count));
 
-    // Header cells (bold)
-    for cell in headers {
-        out.push_str("  [*");
-        spans_to_typst(cell, out);
-        out.push_str("*],\n");
+    // Header cells (bold) - only if not empty
+    if has_headers {
+        for cell in headers {
+            out.push_str("  [*");
+            spans_to_typst(cell, out);
+            out.push_str("*],\n");
+        }
     }
 
-    // Data rows
+    // Data rows - skip empty rows
     for row in rows {
+        if is_row_empty(row) {
+            continue;
+        }
         for cell in row {
             out.push_str("  [");
             spans_to_typst(cell, out);
