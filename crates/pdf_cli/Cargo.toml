@@ -1,0 +1,12 @@
+[package]
+name = "pdf_cli"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "pdf"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+pdf_core = { path = "../pdf_core" }

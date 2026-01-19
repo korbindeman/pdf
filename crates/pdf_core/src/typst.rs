@@ -85,7 +85,8 @@ pub fn blocks_to_typst(blocks: &[Block], config: &Config) -> String {
                 emit_heading(block, &mut out);
 
                 // Include the next block if it exists (to keep heading with first content)
-                if i + 1 < blocks.len() {
+                // But don't include pagebreaks - they can't be inside containers
+                if i + 1 < blocks.len() && !matches!(&blocks[i + 1], Block::PageBreak) {
                     i += 1;
                     emit_block(&blocks[i], &mut out);
                 }
@@ -428,14 +429,14 @@ fn table_to_typst(headers: &[Vec<Span>], rows: &[Vec<Vec<Span>>], out: &mut Stri
 mod tests {
     use crate::markdown_to_typst;
 
-    const PREAMBLE: &str = "#set par(linebreaks: \"optimized\")\n\n";
+    const PREAMBLE: &str = "#set par(linebreaks: \"optimized\")\n#show link: it => underline(text(fill: rgb(\"#1a4f8b\"), it))\n\n";
 
+    // Heading tests use contains() because default config adds min_space blocks
     #[test]
     fn heading() {
-        assert_eq!(
-            markdown_to_typst("# Hello"),
-            format!("{PREAMBLE}#block(breakable: false)[\n= Hello <hello>\n\n]\n\n")
-        );
+        let result = markdown_to_typst("# Hello");
+        assert!(result.starts_with(PREAMBLE));
+        assert!(result.contains("#block(breakable: false)[\n= Hello <hello>\n\n]\n\n"));
     }
 
     #[test]

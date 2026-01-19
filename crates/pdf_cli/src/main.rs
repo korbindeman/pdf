@@ -24,7 +24,7 @@ fn main() {
 
     // Load config
     let config_path = cli.config.unwrap_or_else(|| PathBuf::from("config.toml"));
-    let config = pdf::Config::load(&config_path);
+    let config = pdf_core::Config::load(&config_path);
 
     // Read input file
     let markdown = match fs::read_to_string(&cli.input) {
@@ -36,7 +36,7 @@ fn main() {
     };
 
     // Convert markdown to PDF
-    let pdf_bytes = match pdf::markdown_to_pdf_with_config(&markdown, &config) {
+    let pdf_bytes = match pdf_core::markdown_to_pdf_with_config(&markdown, &config) {
         Ok(bytes) => bytes,
         Err(e) => {
             eprintln!("Error: {}", e);
